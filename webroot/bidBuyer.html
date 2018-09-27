@@ -1,0 +1,219 @@
+<html>
+<head>
+    <title>Textbook Town</title>
+    <!-- Import JS/CSS System Wide Libs -->
+    <!-- Required Global Libs | Full List Maintained in: components/head.html, however HTML import does not exist right now so we need to copy paste, nick researched this for 2 hours with Mark. -->
+    <!-- JS -->
+    <script src="js/mustache.min.js"></script>
+    <script src="js/core.js"></script>
+
+    <!-- JS Lib -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" type="text/css" href="css/core.css">
+
+    <!-- FONT --><!-- TODO: reduce font weight use before production. -->
+    <link href="https://fonts.googleapis.com/css?family=Roboto:100,100i,300,300i,400,400i,500,500i,700,700i,900,900i" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Josefin+Sans:100,100i,300,300i,400,400i,600,600i,700,700i" rel="stylesheet">
+</head>
+
+<body>
+    <div id="top"></div>
+
+    <center><div id="info"></div></center>
+
+    <div id="userbid">
+      
+        <br>
+        <center><h1 class="reversed_title" style="color:#C5494C;">Place a Bid.</h1></center>
+
+        <form id="bidform" name="bidform">
+        <center>
+        <span class="form-field" style="padding-top:50px;padding-bottom:50px;">
+            <label for="bid"></label>
+            <input name="bid" id="bid" type="number" value="" size="40" area-required="true">
+            <input type="submit" name="postBid" id="postBid" class="button" value="Place Bid">
+        </span>
+        </center>
+        </form>
+        <br>
+
+    </div>
+
+    </div>
+
+    <div id="images"></div>
+</body>
+
+
+
+<script type="text/javascript">
+////
+// Page Render
+//
+$(function() {
+
+  //Render Menu and Page title.
+  Promise.resolve(render("#top", "tp/head.html", {title: "Book Information"})).then(
+      menu()
+  );
+
+  //Set Global Vars
+  var id = getQueryVariable("id");
+  var data;
+  var hasbid = false;
+  var isbuyer = true;
+  token = getCookie("session");
+
+  //Log book ID
+  console.log(id)
+
+  //Provided we have a book ID:
+  if (token != null){
+
+      //Ensure this user is a buyer and not the owner of a book.
+      $.ajax({
+          type: 'GET',
+          cache: false,
+          url: 'http://127.0.0.1:5000/book/buyercheck?id=' + id,
+          headers: {
+              "Authorization": "Basic " + btoa(token + ":" + "")
+          },
+          success: function(res){
+
+              //If server responds
+              if(res.status == 'success'){
+                  
+                  //Log the user identity 
+                  console.log(res.isBuyer)
+
+                  //If user is seller redirect appropriately. 
+                  if (!res.isBuyer){
+                      window.location.replace("bidSeller.html?id="+id);
+                  }
+
+                  //Else User is the buyer as we hoped 
+                  else {
+
+                    //Check if the user has placed a bid already
+                    $.ajax({
+                      type: 'GET',
+                      url: 'http://127.0.0.1:5000/book/hasbid?id='+id,
+                      headers: {
+                          "Authorization": "Basic " + btoa(token + ":" + "")
+                      },
+                      cache: false,
+
+                      //On return of the has bid data. 
+                      success: function(res){
+                        
+                        if(res.status == 'success'){
+
+                              //Has user bid?
+                              var hasbid = res.hasBid;
+
+
+                              //Query Bid
+                              $.ajax({
+                                type: 'GET',
+                                cache: false,
+                                url: 'http://127.0.0.1:5000/book/info?id='+id,   
+                                //When the book info is treutned
+                                success: function(res){
+
+                                      if(res.status == 'success'){
+                                                
+                                                //Store the data
+                                                data = res;
+                                                console.log(data);
+
+                                                //Render the Page
+                                                render("#info", "tp/bookInfo.html", {
+                                                  title: "",
+                                                  t_bg:"##EBF5F2",
+                                                  t_c: "#C5494C",
+                                                  img: data.coverPhoto,
+                                                  title: data.title,
+                                                  info: "Author: "+data.author + "<br>Condition: "+data.condition+"%" + "<br>Auction Closes: "+data.closingDate + "<br>Minimum bid: "+data.minimumBid+"<br>Course: "+data.course+"<br>Description: "+data.description+"<br>ISBN:"+data.isbn+"<br>Year: "+data.yearPublished
+                                                });
+
+                                                console.log("USER HAS BID: "+ hasbid)
+                                                
+                                                if (hasbid == true){
+                                                    $("#userbid").remove();
+                                                }
+                                              
+                                                //Render Images
+                                                render("#images", "tp/threeImg.html", {
+                                                    title: "Pictures of the Book",
+                                                    first: data.bestPhoto,
+                                                    second: data.averagePhoto,
+                                                    third: data.worstPhoto
+                                                });
+
+                                      }
+                                      // Some sort of weird failure--shouldn't happen if people are using the website properly
+                                      else {
+                                          // alert(res.message)
+                                          window.location.replace("login.html")
+                                      }
+
+                                    }
+                              });
+
+                        }
+                      }//End of have you bid query
+                    });
+
+                  }//End user is buyer
+               }
+
+          },
+
+          //User is not logged in. 
+          error: function(res) {
+              console.log("Not authenticated")
+              window.location.replace("login.html");
+          }
+
+      });//Call to check buyer
+
+  }//If ID send end.
+
+
+ $('form#bidform').submit(function(e) {
+      e.preventDefault();
+
+      if (token == null){
+          alert("you are not logged in!");
+          window.location.replace("login.html")
+      }
+
+      $.ajax({
+        type: 'POST',
+        url: 'http://127.0.0.1:5000/book/bid',
+        data: '{"bid":'+$("#bid").val()+', "textbook": '+id+'}',
+        contentType:"application/json",
+        headers: {
+         "Authorization": "Basic " + btoa(token + ":" + ""),
+        },
+        success: function(res){
+            if(res.status == 'success'){
+              alert("Your Bid was placed!");
+              $("#userbid").fadeOut();
+          }
+          else{
+              alert(res.message);
+          }
+        }
+      });
+      return false;
+    });
+
+
+});
+</script>
+
+
+</html>
